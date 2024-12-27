@@ -101,25 +101,30 @@ def emotion_detection():
     st.subheader("Kenali Emosi Berdasarkan Suaramu")
     add_background("static/images/bluebg.jpg")
 
-    if 'audio_file' not in st.session_state:
-        st.session_state.audio_file = None
+    if st.session_state.audio_file is not None:
+        st.audio(st.session_state.audio_file, format="audio/wav")
+        st.success("Audio Berhasil Direkam")
 
-    # File uploader untuk mengganti rekaman suara
-    sound_file = st.file_uploader("Unggah File Suara (WAV, MP3)", type=["wav", "mp3"])
-    if sound_file is not None:
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-        temp_file.write(sound_file.read())
-        st.session_state.audio_file = temp_file.name
-        st.success("File audio berhasil diunggah.")
+        if st.button("Muat Ulang"):
+            st.session_state.audio_file = None
+            st.rerun()
+
+    if st.session_state.audio_file is None:
+        sound_file = st.file_uploader("Unggah File Suara (WAV, MP3)", type=["wav", "mp3"])
+        if sound_file is not None:
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+            temp_file.write(sound_file.read())
+            st.session_state.audio_file = temp_file.name
+            st.success("File audio berhasil diunggah.")
 
     if st.session_state.audio_file and st.button("Submit Audio"):
         try:
             # Extract features
             features = extract_features(st.session_state.audio_file)
             
-            # Load model dan scaler
+            # Load model and scaler
             knn = joblib.load('model/knn_model.joblib')
-            scaler = joblib.load('model/scaler.joblib')
+            scaler = joblib.load('model/scaler .joblib')
             
             # Scale features
             features_scaled = scaler.transform([features])
