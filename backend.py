@@ -124,7 +124,7 @@ def emotion_detection():
             
             # Load model and scaler
             knn = joblib.load('model/knn_model.joblib')
-            scaler = joblib.load('model/scaler .joblib')
+            scaler = joblib.load('model/scaler.joblib')
             
             # Scale features
             features_scaled = scaler.transform([features])
