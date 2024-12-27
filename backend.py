@@ -118,8 +118,8 @@ def emotion_detection():
             features = extract_features(st.session_state.audio_file)
             
             # Load model dan scaler
-            knn = joblib.load('model/knn_model3.joblib')
-            scaler = joblib.load('model/scaler3.joblib')
+            knn = joblib.load('model/knn_model.joblib')
+            scaler = joblib.load('model/scaler.joblib')
             
             # Scale features
             features_scaled = scaler.transform([features])
