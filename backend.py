@@ -413,7 +413,7 @@ def main():
     if st.session_state.page == 'first':
         add_background("static/images/bluebg.jpg")
         st.title("Selamat Datang Di EmoVoice")
-        st.write("Kenali Emosi Berdasarkan Suaramu")
+        st.subheader("Kenali Emosi Berdasarkan Suaramu")
         if st.button("Mulai Program"):
             st.session_state.page = 'home'
     else:
