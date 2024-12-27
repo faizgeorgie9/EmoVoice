@@ -92,7 +92,8 @@ def remove_info():
 def home_page():
     add_background("static/images/bluebg.jpg")
     st.title("EmoVoice")
-    st.subheader("EmoVoice adalah sistem pengenalan emosi berbasis suara ( Speech Emotion Recognition )")
+    st.subheader("EmoVoice adalah sistem pengenalan emosi berbasis suara")
+    st.subheader("( Speech Emotion Recognition )")
     st.markdown("<p style='font-size: 24px;'>Sistem ini mampu mendeteksi tujuh emosi dasar:</p>", unsafe_allow_html=True)
     st.write("<p style='font-size: 24px; color: maroon'>• Takut (Fear)<br>• Terkejut (Surprise)<br>• Sedih (Sad)<br>• Marah (Angry)<br>• Jijik (Disgust)<br>• Bahagia (Happy)<br>• Netral (Neutral)</p>", unsafe_allow_html=True)
 
