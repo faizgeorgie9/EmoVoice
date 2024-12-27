@@ -1,6 +1,0 @@
-streamlit
-numpy
-librosa
-sounddevice
-scipy
-joblib
