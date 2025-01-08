@@ -558,10 +558,10 @@ def emotion_detection():
             features = extract_features(st.session_state.audio_file)
 
             # Load model dan scaler jika diperlukan
-            model_path = f'model_{model_option.lower()}_{feature_option}.joblib'
+            model_path = f'model/model_{model_option.lower()}_{feature_option}.joblib'
 
             if model_option == "KNN":
-                scaler_path = f'scaler_{model_option.lower()}_{feature_option}.joblib'
+                scaler_path = f'model/scaler_{model_option.lower()}_{feature_option}.joblib'
                 scaler = joblib.load(scaler_path)
 
             model = joblib.load(model_path)
