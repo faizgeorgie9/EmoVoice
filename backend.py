@@ -8,11 +8,378 @@ import numpy as np
 import streamlit as st
 import sounddevice as sd
 from collections import Counter
+import numpy as np
+from collections import Counter
+import numpy as np
+from typing import List, Tuple
+from dataclasses import dataclass
 from scipy.io.wavfile import write, read
 
 SAMPLE_RATE = 44100
 DURATION = 3
 
+@dataclass
+class TreeNode:
+    """Node structure for decision tree"""
+    feature_idx: int = None
+    threshold: float = None
+    left: any = None
+    right: any = None
+    value: any = None
+    gain: float = None
+
+class DecisionTree:
+    """
+    Decision Tree Classifier implementation
+    """
+    def __init__(
+        self,
+        max_depth: int = 4,
+        min_samples_leaf: int = 1,
+        min_information_gain: float = 0.0
+    ) -> None:
+        """
+        Initialize Decision Tree with hyperparameters
+
+        Args:
+            max_depth: Maximum depth of the tree
+            min_samples_leaf: Minimum samples required at leaf node
+            min_information_gain: Minimum information gain required for split
+        """
+        self.max_depth = max_depth
+        self.min_samples_leaf = min_samples_leaf
+        self.min_information_gain = min_information_gain
+        self.root = None
+        self.n_classes = None
+
+    def entropy(self, class_probabilities: List[float]) -> float:
+        """
+        Calculate entropy for given probability distribution
+
+        Args:
+            class_probabilities: List of class probabilities
+
+        Returns:
+            float: Entropy value
+        """
+        return -np.sum([p * np.log2(p) for p in class_probabilities if p > 0])
+
+    def class_probabilities(self, labels: List) -> List[float]:
+        """
+        Calculate class probabilities from labels
+
+        Args:
+            labels: List of class labels
+
+        Returns:
+            List[float]: Probability distribution over classes
+        """
+        total_count = len(labels)
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        probabilities = counts / total_count
+        return probabilities
+
+    def data_entropy(self, labels: List) -> float:
+        """
+        Calculate entropy of a dataset
+
+        Args:
+            labels: List of class labels
+
+        Returns:
+            float: Entropy of dataset
+        """
+        probabilities = self.class_probabilities(labels)
+        return self.entropy(probabilities)
+
+    def partition_entropy(self, subsets: List) -> float:
+        """
+        Calculate entropy of a partition
+
+        Args:
+            subsets: List of subsets (left and right splits)
+
+        Returns:
+            float: Weighted average entropy of subsets
+        """
+        total_count = sum(len(subset) for subset in subsets)
+        weights = [len(subset) / total_count for subset in subsets]
+        entropies = [self.data_entropy(subset[:, -1]) for subset in subsets]
+        return sum(w * e for w, e in zip(weights, entropies))
+
+    def split(self, data: np.array, feature_idx: int, threshold: float) -> Tuple:
+        """
+        Split dataset based on feature and threshold
+
+        Args:
+            data: Input data
+            feature_idx: Index of feature to split on
+            threshold: Threshold value for split
+
+        Returns:
+            Tuple: Left and right split datasets
+        """
+        left_mask = data[:, feature_idx] <= threshold
+        right_mask = ~left_mask
+        return data[left_mask], data[right_mask]
+
+    def find_best_split(self, data: np.array) -> Tuple:
+        """
+        Find best split for dataset
+        Returns:
+            Tuple: Best feature index, threshold, and information gain
+        """
+        n_features = data.shape[1] - 1
+        parent_entropy = self.data_entropy(data[:, -1])
+        best_gain = -1
+        best_split = None
+
+        for feature_idx in range(n_features):
+            thresholds = np.unique(data[:, feature_idx])
+
+            for threshold in thresholds:
+                left_data, right_data = self.split(data, feature_idx, threshold)
+
+                # Check minimum samples constraint
+                if (len(left_data) < self.min_samples_leaf or
+                    len(right_data) < self.min_samples_leaf):
+                    continue
+
+                # Calculate information gain
+                split_entropy = self.partition_entropy([left_data, right_data])
+                information_gain = parent_entropy - split_entropy
+
+                # Update best split if this split is better
+                if information_gain > best_gain and information_gain > self.min_information_gain:
+                    best_gain = information_gain
+                    best_split = (feature_idx, threshold, information_gain)
+
+        return best_split
+
+    def find_label_probs(self, data: np.array) -> np.array:
+        """
+        Calculate probability distribution over classes for a node
+        Returns:
+            np.array: Probability distribution over classes
+        """
+        label_counts = np.bincount(data[:, -1].astype(int), minlength=self.n_classes)
+        return label_counts / len(data)
+
+    def create_tree(self, data: np.array, current_depth: int) -> TreeNode:
+        """
+        Recursively create decision tree
+
+        Args:
+            data: Input data
+            current_depth: Current depth in tree
+
+        Returns:
+            TreeNode: Root node of (sub)tree
+        """
+        node = TreeNode()
+
+        # Check stopping criteria
+        if (current_depth >= self.max_depth or
+            len(data) < 2 * self.min_samples_leaf or
+            len(np.unique(data[:, -1])) == 1):
+            node.value = self.find_label_probs(data)
+            return node
+
+        # Find best split
+        best_split = self.find_best_split(data)
+
+        # If no valid split found, make leaf node
+        if best_split is None:
+            node.value = self.find_label_probs(data)
+            return node
+
+        # Create split node
+        feature_idx, threshold, gain = best_split
+        left_data, right_data = self.split(data, feature_idx, threshold)
+
+        node.feature_idx = feature_idx
+        node.threshold = threshold
+        node.gain = gain
+        node.left = self.create_tree(left_data, current_depth + 1)
+        node.right = self.create_tree(right_data, current_depth + 1)
+
+        return node
+
+    def predict_one_sample(self, x: np.array) -> np.array:
+        """
+        Predict class probabilities for single sample
+        """
+        node = self.root
+
+        while node.value is None:
+            if x[node.feature_idx] <= node.threshold:
+                node = node.left
+            else:
+                node = node.right
+
+        return node.value
+
+    def predict_proba(self, X: np.array) -> np.array:
+        """
+        Predict class probabilities for multiple samples
+        """
+        return np.array([self.predict_one_sample(x) for x in X])
+
+    def predict(self, X: np.array) -> np.array:
+        """
+        Predict class labels for multiple samples
+        """
+        return np.argmax(self.predict_proba(X), axis=1)
+
+    def train(self, X_train: np.array, y_train: np.array) -> None:
+        """
+        Train decision tree
+
+        Args:
+            X_train: Training features
+            y_train: Training labels
+        """
+        # Get number of classes
+        self.n_classes = len(np.unique(y_train))
+
+        # Combine features and labels
+        data = np.column_stack([X_train, y_train])
+
+        # Create tree
+        self.root = self.create_tree(data, current_depth=0)
+
+    def print_recursive(self, node: TreeNode, level: int = 0) -> None:
+        """
+        Print tree structure recursively
+
+        Args:
+            node: Current node
+            level: Current level in tree
+        """
+        indent = "  " * level
+
+        if node.value is not None:
+            print(f"{indent}Leaf: class probabilities = {node.value}")
+            return
+
+        # Change here: convert node.threshold to a single float for formatting
+        threshold_value = node.threshold.item() if isinstance(node.threshold, np.ndarray) else node.threshold
+        print(f"{indent}Split: feature {node.feature_idx}, threshold = {threshold_value:.4f}, gain = {node.gain:.4f}")
+        print(f"{indent}Left:")
+        self.print_recursive(node.left, level + 1)
+        print(f"{indent}Right:")
+        self.print_recursive(node.right, level + 1)
+
+    def print_tree(self) -> None:
+        """Print entire tree structure"""
+        print("Decision Tree Structure:")
+        self.print_recursive(self.root)
+
+# Fungsi untuk menghitung entropi
+def hitung_entropi(y):
+    label, jumlah = np.unique(y, return_counts=True)
+    proporsi = jumlah / len(y)
+    return -np.sum(proporsi * np.log2(proporsi))
+
+# Fungsi untuk mempartisi dataset
+def partisi(data, fitur, nilai):
+    data_kiri = data[data[:, fitur] <= nilai]
+    data_kanan = data[data[:, fitur] > nilai]
+    return data_kiri, data_kanan
+
+# Fungsi untuk menemukan split terbaik
+def cari_split_terbaik(data):
+    n_fitur = data.shape[1] - 1  # Kolom terakhir adalah label
+    entropi_terbaik = float("inf")
+    split_terbaik = None
+
+    for fitur in range(n_fitur):
+        nilai_unik = np.unique(data[:, fitur])
+        for nilai in nilai_unik:
+            data_kiri, data_kanan = partisi(data, fitur, nilai)
+            if len(data_kiri) > 0 and len(data_kanan) > 0:
+                proporsi_kiri = len(data_kiri) / len(data)
+                proporsi_kanan = len(data_kanan) / len(data)
+                entropi_split = (proporsi_kiri * hitung_entropi(data_kiri[:, -1]) +
+                                 proporsi_kanan * hitung_entropi(data_kanan[:, -1]))
+                if entropi_split < entropi_terbaik:
+                    entropi_terbaik = entropi_split
+                    split_terbaik = {
+                        "fitur": fitur,
+                        "nilai": nilai,
+                        "data_kiri": data_kiri,
+                        "data_kanan": data_kanan
+                    }
+    return split_terbaik
+
+# Node Pohon Keputusan
+class Node:
+    def __init__(self, fitur=None, nilai=None, label=None, data_kiri=None, data_kanan=None):
+        self.fitur = fitur
+        self.nilai = nilai
+        self.label = label
+        self.data_kiri = data_kiri
+        self.data_kanan = data_kanan
+
+# Fungsi untuk membangun pohon keputusan
+def bangun_pohon(data, max_kedalaman, kedalaman=0):
+    label, jumlah = np.unique(data[:, -1], return_counts=True)
+    if len(label) == 1 or kedalaman == max_kedalaman:
+        return Node(label=label[np.argmax(jumlah)])
+
+    split = cari_split_terbaik(data)
+    if not split:
+        return Node(label=label[np.argmax(jumlah)])
+
+    node = Node(fitur=split["fitur"], nilai=split["nilai"])
+    node.data_kiri = bangun_pohon(split["data_kiri"], max_kedalaman, kedalaman + 1)
+    node.data_kanan = bangun_pohon(split["data_kanan"], max_kedalaman, kedalaman + 1)
+    return node
+
+# Fungsi untuk prediksi
+def prediksi_satu(data, pohon):
+    if pohon.label is not None:
+        return pohon.label
+    if data[pohon.fitur] <= pohon.nilai:
+        return prediksi_satu(data, pohon.data_kiri)
+    else:
+        return prediksi_satu(data, pohon.data_kanan)
+
+# Fungsi Random Forest
+class RandomForest:
+    def __init__(self, n_pohon=10, max_kedalaman=5):
+        self.n_pohon = n_pohon
+        self.max_kedalaman = max_kedalaman
+        self.hutan = []
+
+    def pelatihan(self, data):
+        n_sampel = data.shape[0]
+        for _ in range(self.n_pohon):
+            indeks_acak = np.random.choice(n_sampel, n_sampel, replace=True)
+            data_bootstrap = data[indeks_acak]
+            pohon = bangun_pohon(data_bootstrap, self.max_kedalaman)
+            self.hutan.append(pohon)
+
+    def prediksi(self, data):
+        prediksi_semua = np.array([prediksi_satu(data, pohon) for pohon in self.hutan])
+        return Counter(prediksi_semua).most_common(1)[0][0]
+
+# Fungsi train-test split
+def bagi_data(data, rasio_uji=0.2):
+    np.random.shuffle(data)
+    batas = int(len(data) * (1 - rasio_uji))
+    data_latih = data[:batas]
+    data_uji = data[batas:]
+    return data_latih, data_uji
+
+# Fungsi untuk menghitung akurasi
+def hitung_akurasi(data_uji, model):
+    benar = 0
+    for sampel in data_uji:
+        pred = model.prediksi(sampel[:-1])
+        if pred == sampel[-1]:
+            benar += 1
+    return benar / len(data_uji)
 
 # Fungsi untuk menghitung jarak Euclidean
 def euclidean_distance(row1, row2):
@@ -152,7 +519,7 @@ def emotion_detection():
     # Opsi model yang tersedia
     model_option = st.selectbox(
         "Pilih Model Prediksi",
-        options=["KNN", "Random Forest", "Decision Tree"]
+        options=["KNN", "Random_Forest", "Decision_Tree"]  # Perbaiki konsistensi nama
     )
 
     # Opsi jumlah fitur yang akan diekstraksi
@@ -190,12 +557,14 @@ def emotion_detection():
             # Ekstraksi fitur dari file audio
             features = extract_features(st.session_state.audio_file)
 
-            # Load model dan scaler
-            model_path = f'model/model_{model_option.lower()}_{feature_option}.joblib'
-            scaler_path = f'model/scaler_{model_option.lower()}_{feature_option}.joblib'
+            # Load model dan scaler jika diperlukan
+            model_path = f'model_{model_option.lower()}_{feature_option}.joblib'
+
+            if model_option == "KNN":
+                scaler_path = f'scaler_{model_option.lower()}_{feature_option}.joblib'
+                scaler = joblib.load(scaler_path)
 
             model = joblib.load(model_path)
-            scaler = joblib.load(scaler_path)
 
             # Data dari model
             if model_option == "KNN":
@@ -208,12 +577,47 @@ def emotion_detection():
                 # Prediksi emosi menggunakan fungsi knn_predict
                 predicted_emotion = knn_predict(train_data, train_labels, features_scaled[0], k=1)
 
-            else:
-                # Standarisasi fitur
-                features_scaled = scaler.transform([features])
+            elif model_option == "Random_Forest":
+                # Tidak ada standarisasi untuk Random Forest
+                predicted_emotion = model.prediksi(features)
+                # Peta label emosi
+                label_emosi = {
+                0: 'angry',
+                1: 'disgust',
+                2: 'fear',
+                3: 'happy',
+                4: 'neutral',
+                5: 'sad',
+                6: 'surprise'
+                }
 
-                # Prediksi menggunakan Random Forest atau Decision Tree
-                predicted_emotion = model.predict(features_scaled)[0]
+                # Konversi prediksi ke label emosi
+                predicted_emotion = label_emosi[predicted_emotion]
+
+
+            elif model_option == "Decision_Tree":
+                # Pastikan features berbentuk 2D
+                features = np.array([features])
+
+                # Prediksi menggunakan Decision Tree
+                predicted_emotion = model.predict(features)[0]  # Ambil prediksi pertama
+                label_emosi = {
+                    0: 'angry',
+                    1: 'disgust',
+                    2: 'fear',
+                    3: 'happy',
+                    4: 'neutral',
+                    5: 'sad',
+                    6: 'surprise'
+                }
+
+                # Konversi prediksi ke label emosi
+                predicted_emotion = label_emosi[int(predicted_emotion)]  # Konversi ke integer jika diperlukan
+
+
+            else:
+                st.error("Model tidak dikenali. Pilih model yang valid.")
+                return
 
             st.success(f"Emosi yang terdeteksi: {predicted_emotion}")
         except Exception as e:
