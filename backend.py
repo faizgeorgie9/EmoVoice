@@ -1,3 +1,4 @@
+import os
 import time
 import base64
 import joblib
@@ -13,53 +14,100 @@ SAMPLE_RATE = 44100
 DURATION = 3
 
 
-def euclidean_distance(x1, x2):
-    return np.sqrt(np.sum((x1 - x2) ** 2))
+# Fungsi untuk menghitung jarak Euclidean
+def euclidean_distance(row1, row2):
+    return np.sqrt(np.sum((row1 - row2)**2))
 
-class KNearestNeighbors:
-    def __init__(self, k=3):
-        self.k = k
+# Fungsi untuk prediksi KNN
+def knn_predict(train_data, train_labels, test_row, k=1):
+    distances = []
+    for i in range(len(train_data)):
+        dist = euclidean_distance(train_data[i], test_row)
+        distances.append((dist, train_labels[i]))
+    distances.sort(key=lambda x: x[0])
+    k_nearest = [label for _, label in distances[:k]]
+    return Counter(k_nearest).most_common(1)[0][0]
 
-    def fit(self, X, y):
-        self.X_train = X
-        self.y_train = y
-
-    def predict(self, X):
-        predictions = [self._predict(x) for x in X]
-        return np.array(predictions)
-
-    def _predict(self, x):
-        # Hitung jarak ke semua data latih
-        distances = [euclidean_distance(x, x_train) for x_train in self.X_train]
-        # Ambil indeks dari k tetangga terdekat
-        k_indices = np.argsort(distances)[:self.k]
-        # Ambil label dari k tetangga terdekat
-        k_nearest_labels = [self.y_train[i] for i in k_indices]
-        # Voting mayoritas
-        most_common = Counter(k_nearest_labels).most_common(1)
-        return most_common[0][0]
-
-def extract_features(file_path):
+def extract_features1(file_path):
     audio, src = librosa.load(file_path)
-
+    
     # MFCC
     mfccs = librosa.feature.mfcc(y=audio, sr=src, n_mfcc=13)
     mfccs = np.mean(mfccs.T, axis=0)
-
+    
     # Chroma
     chroma = librosa.feature.chroma_stft(y=audio, sr=src)
     mean_chroma = np.mean(chroma, axis=1)
-
+    
     # Delta
     mfccs_delta = librosa.feature.delta(librosa.feature.mfcc(y=audio, sr=src, n_mfcc=13))
     mfccs_delta = np.mean(mfccs_delta.T, axis=0)
-
+    
     # Delta2
     mfccs_delta2 = librosa.feature.delta(librosa.feature.mfcc(y=audio, sr=src, n_mfcc=13), order=2)
     mfccs_delta2 = np.mean(mfccs_delta2.T, axis=0)
-
+    
+    # Prosodic Energy (RMS)
+    rms = librosa.feature.rms(y=audio)
+    mean_rms = np.mean(rms, axis=1)
+    
     # Gabungkan semua fitur
-    features = np.concatenate([mfccs, mfccs_delta, mfccs_delta2])
+    features = np.concatenate([mfccs, mfccs_delta, mfccs_delta2, mean_chroma, mean_rms])
+    return features
+
+def extract_features2(file_path):
+    audio, src = librosa.load(file_path)
+    
+    # MFCC
+    mfccs = librosa.feature.mfcc(y=audio, sr=src, n_mfcc=20)
+    mfccs = np.mean(mfccs.T, axis=0)
+    
+    # Chroma
+    chroma = librosa.feature.chroma_stft(y=audio, sr=src)
+    mean_chroma = np.mean(chroma, axis=1)
+    
+    # Delta
+    mfccs_delta = librosa.feature.delta(librosa.feature.mfcc(y=audio, sr=src, n_mfcc=20))
+    mfccs_delta = np.mean(mfccs_delta.T, axis=0)
+    
+    # Delta2
+    mfccs_delta2 = librosa.feature.delta(librosa.feature.mfcc(y=audio, sr=src, n_mfcc=20), order=2)
+    mfccs_delta2 = np.mean(mfccs_delta2.T, axis=0)
+    
+    # Prosodic Energy (RMS)
+    rms = librosa.feature.rms(y=audio)
+    mean_rms = np.mean(rms, axis=1)
+    
+    # Gabungkan semua fitur
+    features = np.concatenate([mfccs, mfccs_delta, mfccs_delta2, mean_chroma, mean_rms])
+    return features
+
+# Fungsi untuk ekstraksi fitur dari file suara
+def extract_features3(file_path):
+    audio, src = librosa.load(file_path)
+    
+    # MFCC
+    mfccs = librosa.feature.mfcc(y=audio, sr=src, n_mfcc=30)
+    mfccs = np.mean(mfccs.T, axis=0)
+    
+    # Chroma
+    chroma = librosa.feature.chroma_stft(y=audio, sr=src)
+    mean_chroma = np.mean(chroma, axis=1)
+    
+    # Delta
+    mfccs_delta = librosa.feature.delta(librosa.feature.mfcc(y=audio, sr=src, n_mfcc=30))
+    mfccs_delta = np.mean(mfccs_delta.T, axis=0)
+    
+    # Delta2
+    mfccs_delta2 = librosa.feature.delta(librosa.feature.mfcc(y=audio, sr=src, n_mfcc=30), order=2)
+    mfccs_delta2 = np.mean(mfccs_delta2.T, axis=0)
+    
+    # Prosodic Energy (RMS)
+    rms = librosa.feature.rms(y=audio)
+    mean_rms = np.mean(rms, axis=1)
+    
+    # Gabungkan semua fitur
+    features = np.concatenate([mfccs, mfccs_delta, mfccs_delta2, mean_chroma, mean_rms])
     return features
 
 def normalize_audio(audio):
@@ -92,8 +140,7 @@ def remove_info():
 def home_page():
     add_background("static/images/bluebg.jpg")
     st.title("EmoVoice")
-    st.subheader("EmoVoice adalah sistem pengenalan emosi berbasis suara")
-    st.subheader("( Speech Emotion Recognition )")
+    st.subheader("EmoVoice adalah sistem pengenalan emosi berbasis suara (Speech Emotion Recognition")
     st.markdown("<p style='font-size: 24px;'>Sistem ini mampu mendeteksi tujuh emosi dasar:</p>", unsafe_allow_html=True)
     st.write("<p style='font-size: 24px; color: maroon'>• Takut (Fear)<br>• Terkejut (Surprise)<br>• Sedih (Sad)<br>• Marah (Angry)<br>• Jijik (Disgust)<br>• Bahagia (Happy)<br>• Netral (Neutral)</p>", unsafe_allow_html=True)
 
@@ -101,6 +148,26 @@ def emotion_detection():
     st.title("Emotion Detection")
     st.subheader("Kenali Emosi Berdasarkan Suaramu")
     add_background("static/images/bluebg.jpg")
+
+    # Opsi model yang tersedia
+    model_option = st.selectbox(
+        "Pilih Model Prediksi",
+        options=["KNN", "Random Forest", "Decision Tree"]
+    )
+
+    # Opsi jumlah fitur yang akan diekstraksi
+    feature_option = st.selectbox(
+        "Pilih Jumlah Fitur Ekstraksi",
+        options=[13, 20, 30]
+    )
+
+    # Pilihan fungsi ekstraksi fitur
+    if feature_option == 13:
+        extract_features = extract_features1
+    elif feature_option == 20:
+        extract_features = extract_features2
+    elif feature_option == 30:
+        extract_features = extract_features3
 
     if st.session_state.audio_file is not None:
         st.audio(st.session_state.audio_file, format="audio/wav")
@@ -120,20 +187,35 @@ def emotion_detection():
 
     if st.session_state.audio_file and st.button("Submit Audio"):
         try:
-            # Extract features
+            # Ekstraksi fitur dari file audio
             features = extract_features(st.session_state.audio_file)
-            
-            # Load model and scaler
-            knn = joblib.load('model/knn_model.joblib')
-            scaler = joblib.load('model/scaler.joblib')
-            
-            # Scale features
-            features_scaled = scaler.transform([features])
-            
-            # Predict emotion
-            predicted_emotion = knn.predict(features_scaled)
-            
-            st.success(f"Emosi yang terdeteksi: {predicted_emotion[0]}")
+
+            # Load model dan scaler
+            model_path = f'model/model_{model_option.lower()}_{feature_option}.joblib'
+            scaler_path = f'model/scaler_{model_option.lower()}_{feature_option}.joblib'
+
+            model = joblib.load(model_path)
+            scaler = joblib.load(scaler_path)
+
+            # Data dari model
+            if model_option == "KNN":
+                train_data = model["features"]
+                train_labels = model["labels"]
+
+                # Standarisasi fitur
+                features_scaled = scaler.transform([features])
+
+                # Prediksi emosi menggunakan fungsi knn_predict
+                predicted_emotion = knn_predict(train_data, train_labels, features_scaled[0], k=1)
+
+            else:
+                # Standarisasi fitur
+                features_scaled = scaler.transform([features])
+
+                # Prediksi menggunakan Random Forest atau Decision Tree
+                predicted_emotion = model.predict(features_scaled)[0]
+
+            st.success(f"Emosi yang terdeteksi: {predicted_emotion}")
         except Exception as e:
             st.error(f"Terjadi kesalahan dalam memproses audio: {str(e)}")
 
@@ -277,76 +359,6 @@ def article_5_page():
         st.rerun()
 
 
-def emobot_page():
-    st.title("EmoBot ( Demo )")
-    add_background("static/images/bluebg.jpg")
-
-    st.subheader("Chat with EmoBot")
-
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    # Cek jika navigasi dilakukan, hapus riwayat chat
-    if "current_page" in st.session_state and st.session_state.current_page != "EmoBot":
-        st.session_state.chat_history = []
-
-    user_input = st.text_input("Ketik pesan Anda:", placeholder="Tanyakan sesuatu...")
-
-    if st.button("Kirim"):
-        if user_input:
-            st.session_state.chat_history.append({"sender": "User", "message": user_input})
-            response = emobot_response(user_input)
-            st.session_state.chat_history.append({"sender": "EmoBot", "message": response})
-
-    st.markdown("---")
-    st.write("### Riwayat Percakapan:")
-    for chat in st.session_state.chat_history:
-        if chat["sender"] == "User":
-            st.markdown(f"**You:** {chat['message']}")
-        else:
-            st.markdown(f"**EmoBot:** {chat['message']}")
-
-def emobot_response(user_input):
-    responses = {
-        "hello": "Hii, apakah ada yang bisa dibantu ?",
-        "how are you": "I'm just a bot, but I'm here to help!",
-        "emotion detection": "I can help detect emotions from your voice! Try it out in the main menu.",
-        "assalamu'alaikum" : "Wa'alaikumsalaam.",
-        "unesa": "Satu Langkah Di Depan",
-        "halo": "Halo! Ada yang bisa saya bantu hari ini?",
-        "apa kabar": "Saya hanyalah bot, tapi saya merasa sangat senang bisa membantu Anda!",
-        "deteksi emosi": "Saya dapat membantu mendeteksi emosi dari suara Anda! Silakan coba fitur ini di menu utama.",
-        "bagaimana cara menggunakan": "Anda dapat menggunakan fitur dengan memilih menu yang tersedia di sidebar.",
-        "tentang emovoice": "EmoVoice adalah sistem deteksi emosi berbasis suara. Kami menggunakan teknologi canggih untuk mendeteksi berbagai emosi manusia.",
-        "terima kasih": "Sama-sama! Saya senang bisa membantu Anda.",
-        "siapa yang membuat emovoice": "EmoVoice dibuat oleh tim mahasiswa yang antusias terhadap kecerdasan buatan dan pengolahan suara.",
-        "apa fungsi utama emovoice": "Fungsi utama EmoVoice adalah mendeteksi emosi seperti Bahagia, Sedih, Marah, Takut, Terkejut, Jijik, dan Netral dari suara.",
-        "emobot apa kabar": "Saya baik-baik saja! Bagaimana dengan Anda?",
-        "bisa bantu saya": "Tentu saja! Silakan tanyakan apa saja.",
-        "fitur apa saja di emovoice": "Kami memiliki fitur Deteksi Emosi, Artikel terkait, dan juga interaksi dengan EmoBot seperti ini.",
-        "bagaimana cara kerja deteksi emosi": "Kami menggunakan algoritma KNN dan fitur suara seperti MFCC, Chroma, dan Delta untuk mendeteksi emosi dari suara Anda.",
-        "kenapa saya harus mencoba ini": "Karena ini adalah cara menarik untuk memahami emosi Anda dan bagaimana teknologi dapat membantu menganalisisnya!",
-        "selamat tinggal": "Selamat tinggal! Semoga harimu menyenangkan.",
-        "apa itu knn": "KNN atau K-Nearest Neighbors adalah algoritma pembelajaran mesin yang digunakan untuk mengklasifikasikan data berdasarkan tetangga terdekat.",
-        "mfcc itu apa": "MFCC atau Mel-frequency cepstral coefficients adalah fitur audio yang sering digunakan untuk analisis suara, seperti deteksi emosi.",
-        "chroma itu apa": "Fitur Chroma merepresentasikan energi frekuensi dalam nada musik tertentu dan digunakan dalam pengolahan audio.",
-        "bisa ngobrol dengan saya?": "Tentu saja! Saya di sini untuk membantu Anda kapan saja.",
-        "siapa yang menggunakan emovoice": "EmoVoice dapat digunakan oleh siapa saja, termasuk profesional kesehatan mental, layanan pelanggan, atau hanya untuk hiburan.",
-        "aplikasi ini gratis?": "Ya, Anda bisa menggunakan EmoVoice secara gratis untuk eksplorasi dan penelitian.",
-        "apa yang bisa emobot lakukan": "Saya bisa menjawab pertanyaan Anda tentang EmoVoice, memberikan informasi, dan membantu memahami fitur deteksi emosi.",
-        "bagaimana cara mendeteksi emosi": "Silakan unggah atau rekam suara Anda di fitur Deteksi Emosi. EmoVoice akan menganalisis suara tersebut untuk mengidentifikasi emosi.",
-        "apa kegunaan deteksi emosi": "Deteksi emosi dapat digunakan untuk meningkatkan interaksi manusia-mesin, mendukung kesehatan mental, dan analisis perilaku pengguna.",
-        "mengapa emovoice penting": "Karena EmoVoice membantu menjembatani pemahaman antara emosi manusia dan teknologi, membuka peluang baru dalam berbagai aplikasi.",
-        "apakah emovoice menggunakan ai": "Ya, EmoVoice menggunakan kecerdasan buatan dan pembelajaran mesin untuk mendeteksi emosi dengan akurat.",
-        "di mana emovoice dikembangkan": "EmoVoice dikembangkan oleh mahasiswa yang tertarik dengan pengolahan sinyal suara di Indonesia.",
-        "berapa lama deteksi emosi dilakukan": "Proses deteksi emosi biasanya hanya membutuhkan beberapa detik setelah suara diunggah.",
-        "apakah hasil deteksi akurat": "Kami menggunakan algoritma yang dioptimalkan untuk akurasi tinggi, namun hasilnya tetap bergantung pada kualitas suara yang diberikan.",
-        "apa itu emosi": "Emosi adalah respons psikologis dan fisiologis yang membantu manusia memahami dan berinteraksi dengan dunia sekitar mereka.",
-        "bisakah membantu saya memahami algoritma?": "Tentu saja, saya bisa menjelaskan algoritma yang digunakan dalam EmoVoice, seperti KNN dan metode ekstraksi fitur audio.",
-        "berapa banyak emosi yang bisa dideteksi?": "EmoVoice mendeteksi 7 emosi dasar: Bahagia, Sedih, Marah, Takut, Jijik, Terkejut, dan Netral."
-    }
-    return responses.get(user_input.lower(), "Sorry Gw Gapaham, Bisa Di Ulangi ?")
-
 
 def about_page():
     st.title("About Us")
@@ -384,9 +396,8 @@ def about_page():
         st.image("static/images/serigala.jpg", caption="Alamsyah Ramadhan Vaganza ( 23031554 ) amalsyah@mhs.unesa.ac.id")
 
     st.markdown("---")
-    st.subheader("EmoVoice")
+    st.subheader("Emovoice 2024")
     st.markdown("---")
-
 
 pages = {
     "Main": {
@@ -395,7 +406,6 @@ pages = {
     },
     "Resource": {
         "Literasi": article_page,
-        "EmoBot": emobot_page,
         "About Us": about_page
     }
 }
@@ -413,7 +423,7 @@ def main():
     if st.session_state.page == 'first':
         add_background("static/images/bluebg.jpg")
         st.title("Selamat Datang Di EmoVoice")
-        st.subheader("Kenali Emosi Berdasarkan Suaramu")
+        st.write("Kenali Emosi Berdasarkan Suaramu")
         if st.button("Mulai Program"):
             st.session_state.page = 'home'
     else:
@@ -441,6 +451,5 @@ def main():
 
             pages[selected][sub_selected]()
     
-
 if __name__ == "__main__":
     main()
